@@ -1,0 +1,381 @@
+/*Program: 
+FileParser2.cpp for CSC 230-02
+Author: Miles Cumiskey 
+---------------------------
+Description:  An application that inputs a set of files and stores information about each file’s
+contents. The data files used for input to this application are simple ASCII text files.    
+Input: an ASCII text files with the names of the files to process
+Output: Wordcount and linecount of included files. Allows for searching documents for specific words. Displays the result
+Preconditions: none
+Postconditions: none
+---------------------------*/
+
+#include <iostream>
+#include <stdlib.h>
+#include <fstream>
+#include <string>
+#include <string.h>
+#include <vector>
+#include <cctype>
+
+using namespace std;
+
+
+//A class representing a unique word - stores the word and all the lines it appears on
+class WordObj{ 
+    public:
+    string value;            // the word text
+    int onOneLine;
+    vector<int> onLines; // line numbers the word appears on
+
+    WordObj(){
+        onLines.clear();
+    } //default constructor 
+
+    WordObj(string word){ //wordObj with just a string value (linenums can be added later)
+        value = word;
+   }
+
+    WordObj(string word, int lineNum){ //wordObj with a string value and the first line it appears on
+        value = word;
+        onOneLine = lineNum;
+        onLines.push_back(lineNum);
+    }
+
+    void addLineNumber(int newline){
+        if(checkIfLineNumAlreadyThere(newline) == false) {
+            onLines.push_back(newline);
+        }
+    }
+
+    //if a number appears on the same multiple times, only store one copy of the linenum
+    bool checkIfLineNumAlreadyThere(int newLine) {
+        for(int i = 0; i < onLines.size(); i++){
+            if(newLine == onLines.at(i)){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    //print all the lines a number appears on without and endl
+    void printlineNumsInline() {
+        for(int i = 0; i < onLines.size(); i++){
+            cout << onLines.at(i) << " ";
+        }
+    }
+
+};
+
+//A class representing a file and all the words within it
+class File {
+    public: 
+    string filename;     // the name of the file
+    int wordcount;       // the number of words in the file overall 
+    int linecount;       // the number of lines
+    vector<WordObj> words;
+
+    File(){ //default
+        wordcount = 0;
+        linecount = 0; 
+    }
+
+    File(string name, int numWords, int numLines){
+        filename = name;
+        wordcount = numWords;
+        linecount = numLines; 
+    }
+
+    File(string name, int numWords, int numLines, vector <WordObj> wordsFromFile){
+        filename = name;
+        wordcount = numWords;
+        linecount = numLines; 
+        for(int i = 0; i < wordsFromFile.size(); i++) {
+            words.push_back(wordsFromFile[i]);
+        }
+    }
+
+    void add_WordObj(WordObj newWord){
+        words.push_back(newWord);
+    }
+
+    //for testing
+    void eject_file_contents(){
+        for(int i = 0; i < words.size(); i++){
+            cout << words[i].value << " On lines: ";
+            words[i].printlineNumsInline();
+            cout << " " << endl;
+        }
+        cout << words.size() << endl;
+    }
+       
+    bool search_file(string target){
+        for(int i = 0; i < words.size(); i++){
+            if(words.at(i).value == target){
+                return true;
+            } 
+        }
+        return false;
+    }
+
+    //useful fot printing words
+    WordObj getSearchWord(string target){
+       for(int i = 0; i < words.size(); i++){
+            if(words.at(i).value == target){
+                return words.at(i);
+            }
+        }
+    }
+
+
+};
+
+bool doesFileOpen(ifstream &infile); //I added this because I needed to repeatedly check across functions 
+vector<File> run(ifstream &infile);
+File processFile(ifstream &infile, string filename);
+void displaySummary(vector<File>);
+void upperCase (string &name);
+bool search_vector(string &target, vector <WordObj> words);
+int getSearchIndex(string &target, vector <WordObj> words);
+
+
+
+int main(int argc, char *argv[]){
+    string filename;
+    string name;
+
+    vector<File> fileList; 
+
+    //figure out if the file is an command line argument or a manual input, check it, and begin to run it
+    if (argc == 1) {
+        cout << "Please enter the name of the file that contains a list of input files: ";
+        cin >> filename;
+        ifstream infile(filename);  
+        if (doesFileOpen(infile) == true) { 
+            cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+            cout << "File: " << filename << " opened sucessfully." << endl;
+            cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+            fileList = run(infile);
+        } else {
+            return 1;
+        }  
+    } else {
+        ifstream argfile(argv[1]); 
+        filename = argv[1];
+         if (doesFileOpen(argfile) == true) { 
+            cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+            cout << "File: " << filename << " opened sucessfully." << endl;
+            cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+            fileList = run(argfile);
+        } else {
+            cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+            cout << "Fileparser1 Error - couldn't process " << filename << endl;
+            cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+            return 1;
+        }
+    }
+
+    displaySummary(fileList);
+
+    string userSearch = " "; //for finding a target word
+    int scount = 0;
+    int ucount = 0;
+    bool searchFound = false; //search not found
+
+    //basic search mechanic 
+    while (userSearch != "BYE-BYE") {
+        cout << "Please enter a word to find, or 'bye-bye' to exit : ";
+        cin >> userSearch;
+        upperCase(userSearch);
+        cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+
+        for(int i = 0; i < fileList.size(); i++) {
+            searchFound = fileList[i].search_file(userSearch);
+
+                if (userSearch == "BYE-BYE") {
+                    cout << "Thank you for searching." << endl;
+                    break;
+                }
+                // if the name is found & not 'bye-bye' this prints the results ONCE
+                if (searchFound == true) {
+                    WordObj foundWord = fileList[i].getSearchWord(userSearch);
+
+                    cout << userSearch << " found in file: " << fileList[i].filename << endl;
+                    cout << "On lines: ";
+                    foundWord.printlineNumsInline();
+                    cout << endl;
+                    scount++;
+
+                } 
+                if (searchFound == false) {
+                    cout << userSearch << " not found in file: " << fileList[i].filename << endl;
+                    ucount++;
+                }
+        cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+
+        }
+    }
+
+    cout << "- - - - - - - - - Summary - - - - - - - - -" << endl;
+    cout << "There were " << scount << " sucessful searches" << endl;
+    cout << "There were " << ucount << " unsucessful searches" << endl;
+    cout << "- - - - - - - - - END OF RUN - - - - - - - - -" << endl;
+
+    return 0;
+}
+
+//check if a given file opens
+bool doesFileOpen(ifstream &infile) {
+    if(infile.fail()) {
+        return false;
+    } else {
+        return true;
+    }
+
+}
+
+//converts a string to upper case
+void upperCase (string &name) {
+    int length;
+    length = name.size();
+    int p;
+    for(p = 0; p < length; p++){
+        name[p] = toupper(name[p]);
+    }
+}
+
+//Looks through the input file and sends each subfile to processFile
+//returned File classes are added to a vector
+//file is then closed
+vector<File> run(ifstream &infile) {
+    string file; //holds the current file
+    vector<File> fileList; //holds all the file objects
+    int endOfFile;
+
+    cout << endl;
+    cout << "+ + + + + + + + Processing Input Files + + + + + + + +" << endl;
+
+    while(!infile.eof()) {  
+        infile >> file;
+        ifstream subFile(file);
+
+        //infile.eof returns true a bit too late for being the while loop
+        //this prevents the code from processing the last file twice
+        endOfFile = infile.peek();
+        if (endOfFile == EOF) {
+            break;
+        } else if ((doesFileOpen(subFile) == true)) {
+            //push processed file into vector of processed files
+            fileList.push_back(processFile(subFile, file));
+        } else {
+            //ERROR, ignore file and continue 
+            cout << "Fileparser1 Error - couldn't process " << file << endl;
+        }
+    } 
+    infile.close();
+    return fileList;
+}
+
+//  Create and initialize the file structure
+//  Parse file into WordObjs
+//  Remove punctuation + capslock them
+//  store wordobjs in a file
+//  Generate file line and word counts
+//  Close files
+File processFile(ifstream &infile, string filename) {
+    int wordcount;       // the number of words
+    int linecount;       // the number of lines
+    vector<WordObj> wordsForFile;  // vector of all the wordObjs to put in the processed file
+
+
+    char lookingForNewLine = '\n';
+    
+    string word;
+    int numWords = 0;
+    int numLines = 1; //starts at 1, because the last line ends with null, not \n
+
+    cout << filename << endl;
+
+    //find line and word count
+    while(infile.good() == true) {  
+        infile >> word; 
+        upperCase(word);
+        numWords++;
+
+        //remove punctuation + capital letters
+        for(int i = 0; i < word.size(); i++) {
+            if ((word.substr(i) == ".") || (word.substr(i) == ",") || (word.substr(i) == "!") || (word.substr(i) == ";") ||
+                (word.substr(i) == ":") || (word.substr(i) == "?") ||( word.substr(i) == "@") || (word.substr(i) == "&") ||
+                (word.substr(i) == "-") || (word.substr(i) == "“") ||( word.substr(i) == "”") || (word.substr(i) == "'")){
+                    word.erase(i);  
+            }
+        }
+
+        WordObj processedWord; //new wordObj
+
+        //start w/ at least one to add the rest later
+        if(numWords == 1){
+            processedWord.value = word;
+            wordsForFile.push_back(processedWord);  
+        }
+
+        //no duplicates
+        if(search_vector(word, wordsForFile) == true){
+            wordsForFile[getSearchIndex(word, wordsForFile)].addLineNumber(numLines);
+            //cout << "This appears on lines: ";
+            //wordsForFile[getSearchIndex(word, wordsForFile)].printlineNumsInline();
+            //cout << endl;
+        } else {
+            processedWord.value = word;
+            processedWord.addLineNumber(numLines);
+            wordsForFile.push_back(processedWord);  
+            //cout << processedWord.value << " is a new word." << endl;
+            //cout << endl;
+         }
+        
+
+        // for (int i = 0; i < wordsForFile.size(); i++) { 
+        //     cout << wordsForFile[i].value << endl;
+        // }
+
+        //counts line numbers 
+        if (infile.get() == lookingForNewLine) {
+                numLines++;
+        }
+    }
+
+    cout << "Finished processing " << filename << endl;
+
+    File processedFile(filename, numWords, numLines, wordsForFile);
+    
+    infile.close();
+
+    return processedFile;
+}
+
+bool search_vector(string &target, vector <WordObj> words){
+    for(int i = 0; i < words.size(); i++){
+        if(words.at(i).value == target){
+            return true;
+        } 
+    }
+    return false;
+}
+
+int getSearchIndex(string &target, vector <WordObj> words){
+    for(int i = 0; i < words.size(); i++){
+        if(words[i].value == target){
+            return i;
+        } 
+    }
+    return 0;
+}
+//Goes through the vector of Files and prints a one-line summary of each
+void displaySummary(vector<File> fileList) {
+    cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+
+    for(int i = 0; i < fileList.size(); i ++) {
+        cout << fileList[i].filename << " has " << fileList[i].linecount << " lines and " << fileList[i].wordcount << " words." << endl;
+    }
+    cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+}
