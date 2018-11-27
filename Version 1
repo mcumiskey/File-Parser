@@ -1,0 +1,184 @@
+/*Program: 
+FileParser2.cpp for CSC 230-02
+Author: Miles Cumiskey 
+---------------------------
+Description:  An application that inputs a set of files and stores information about each file’s
+contents. The data files used for input to this application are simple ASCII text files.    
+Input: an ASCII text files with the names of the files to process
+Output: Wordcount and linecount of included files. Allows for searching documents for words. 
+Preconditions: none
+Postconditions: none
+---------------------------*/
+
+#include <iostream>
+#include <stdlib.h>
+#include <fstream>
+#include <string>
+#include <string.h>
+#include <algorithm> //used for a tolower replacement 
+#include <vector>
+
+using namespace std;
+
+struct File {
+    string filename;     // the name of the file
+    int wordcount;       // the number of words
+    int linecount;       // the number of lines
+    vector<string> words;
+};
+
+bool doesFileOpen(ifstream &infile); //I added this because I needed to repeatedly check across functions 
+vector<File> run(ifstream &infile);
+File processFile(ifstream &infile, string filename);
+void displaySummary(vector<File>);
+
+
+
+int main(int argc, char *argv[]){
+    string filename;
+
+    vector<File> fileList; 
+
+    //figure out if the file is an command line argument or a manual input, check it, and begin to run it
+    if (argc == 1) {
+        cout << "Please enter the name of the file that contains a list of input files: ";
+        cin >> filename;
+        ifstream infile(filename);  
+        if (doesFileOpen(infile) == true) { 
+            cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+            cout << "File: " << filename << " opened sucessfully." << endl;
+            cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+            fileList = run(infile);
+        } else {
+            return 1;
+        }  
+    } else {
+        ifstream argfile(argv[1]); 
+        filename = argv[1];
+         if (doesFileOpen(argfile) == true) { 
+            cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+            cout << "File: " << filename << " opened sucessfully." << endl;
+            cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+            fileList = run(argfile);
+        } else {
+            cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+            cout << "Fileparser1 Error - couldn't process " << filename << endl;
+            cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+            return 1;
+        }
+    }
+
+    //display final results
+    displaySummary(fileList);
+
+    return 0;
+   
+}
+
+//check if a given file opens
+bool doesFileOpen(ifstream &infile) {
+    if(infile.fail()) {
+        return false;
+    } else {
+        return true;
+    }
+
+}
+
+//Looks through the input file and sends each subfile to processFile
+//returned File structs are added to a vector
+//file is then closed
+vector<File> run(ifstream &infile) {
+    string file; //holds the current file
+    vector<File> fileList; //holds all the file objects
+    int endOfFile;
+
+    cout << endl;
+    cout << "+ + + + + + + + Processing Input Files + + + + + + + +" << endl;
+
+    while(!infile.eof()) {  
+        infile >> file;
+        ifstream subFile(file);
+
+        //infile.eof returns true a bit too late for being the while loop
+        //this prevents the code from processing the last file twice
+        endOfFile = infile.peek();
+        if (endOfFile == EOF) {
+            break;
+        } else if ((doesFileOpen(subFile) == true)) {
+            //push processed file into vector of processed files
+            fileList.push_back(processFile(subFile, file));
+        } else {
+            //ERROR, ignore file and continue 
+            cout << "Fileparser1 Error - couldn't process " << file << endl;
+        }
+    } 
+    infile.close();
+    return fileList;
+}
+
+//  Create and initialize the file structure
+//  Parse file into words
+//  Remove punctuation
+//  Load words into file
+//  Generate file line and word counts
+//  Close files
+File processFile(ifstream &infile, string filename) {
+    int wordcount;       // the number of words
+    int linecount;       // the number of lines
+    vector<string> words;  // vector of all the words in the file
+
+    char lookingForNewLine = '\n';
+    
+    string word;
+    int numWords = 0;
+    int numLines = 1; //starts at 1, because the last line ends with null, not \n
+
+    cout << filename << endl;
+        //find line and word count
+    while(infile.good() == true) {  
+        infile >> word; 
+        numWords++;
+
+        //remove punctuation + capital letters
+        for(int i = 0; i < word.size(); i++) {
+            if ((word.substr(i) == ".") || (word.substr(i) == ",") || (word.substr(i) == "!") || (word.substr(i) == ";") ||
+                (word.substr(i) == ":") || (word.substr(i) == "?") ||( word.substr(i) == "@") || (word.substr(i) == "&")) {
+                    word.erase(i);  
+            }
+
+        }
+
+        //function to convert string into lowercase (from Atul Rokade on stack overflow)
+        //had problems with tolower
+        transform(word.begin(), word.end(), word.begin(), ::tolower);
+
+        //push word (with punctuation + capitals removed) to vector 
+        words.push_back(word);
+
+        if (infile.get() == lookingForNewLine) {
+            numLines++;
+        }
+    }
+
+    cout << "Finished processing " << filename << endl;
+
+    File processedFile = {filename, numWords, numLines, words};
+
+    infile.close();
+
+    return processedFile;
+};
+
+//Goes through the vector of Files and prints a one-line summary of each
+void displaySummary(vector<File> fileList) {
+    cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+
+    for(int i = 0; i < fileList.size(); i ++) {
+        cout << fileList[i].filename << " has " << fileList[i].linecount << " lines and " << fileList[i].wordcount << " words." << endl;
+    }
+    cout << "- - - - - - - - - - - - - - - - - - - - - - - - - - - " << endl;
+}
+
+
+
